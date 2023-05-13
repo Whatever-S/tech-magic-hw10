@@ -2,18 +2,19 @@ import { connect, close } from './connection.js';
 
 const db = await connect();
 const usersCollection = db.collection("users");
+const articlesCollection = db.collection("articles")
 
 const run = async () => {
   try {
-    await getUsersExample();
-    // await task1();
-    // await task2();
-    // await task3();
-    // await task4();
-    // await task5();
-    // await task6();
-    // await task7();
-    // await task8();
+    //await getUsersExample();
+    //await task1();
+    //await task2();
+    //await task3();
+    //await task4();
+    //await task5();
+    //await task6();
+    //await task7();
+    //await task8();
     // await task9();
     // await task10();
     // await task11();
@@ -45,7 +46,10 @@ async function getUsersExample () {
 // - Get all users, sort them by age (ascending), and return only 5 records with firstName, lastName, and age fields.
 async function task1 () {
   try {
-
+    const allUsers = await usersCollection.find( {},  
+      { projection: {firstName: 1, lastName: 1, age: 1, _id: 0}
+      }).limit(5).sort({age : "asc"  }).toArray()
+    console.log(allUsers)
   } catch (err) {
     console.error('task1', err)
   }
@@ -54,7 +58,11 @@ async function task1 () {
 // - Add new field 'skills: []" for all users where age >= 25 && age < 30 or tags includes 'Engineering'
 async function task2 () {
   try {
-    
+    const usersWithSkills = await usersCollection.updateMany(
+      { $or: [{ age: { $gte: 25, $lt: 30 } }, { tags: 'Engineering' }] }  ,
+      { $set: {skills: []} }
+    )
+    console.log(usersWithSkills)
   } catch (err) {
     console.error('task2', err)
   }
@@ -64,7 +72,12 @@ async function task2 () {
 //   Filter: the document should contain the 'skills' field
 async function task3() {
   try {
-
+    const updatedDocument = await usersCollection.findOneAndUpdate(
+      { skills: { $exists: true } },
+      { $push: { skills: { $each: ['js', 'git'] } } },
+      { returnDocument: "after" }
+    )
+    console.log(updatedDocument)
   } catch (err) {
     console.error('task3', err)
   }
@@ -74,7 +87,20 @@ async function task3() {
 //   Set firstName: "Jason", lastName: "Wood", tags: ['a', 'b', 'c'], department: 'Support'
 async function task4 () {
   try {
+    const filter = {
+      email: /^john/,
+      "address.state": "CA"
+    };
 
+    const replacement = {
+      firstName: "Jason",
+      lastName: "Wood",
+      tags: ['a', 'b', 'c'],
+      department: 'Support'
+    };
+
+    const replacedDocument = await usersCollection.findOneAndReplace(filter, replacement, { returnDocument: "after" });
+    console.log(replacedDocument);
   } catch (err) {
     console.log('task4', err);
   }
@@ -83,7 +109,12 @@ async function task4 () {
 // - Pull tag 'c' from the first document where firstName: "Jason", lastName: "Wood"
 async function task5 () {
   try {
-
+    const updatedDocument = await usersCollection.findOneAndUpdate(
+      { firstName: "Jason", lastName: "Wood" },
+      { $pull:  { tags: 'c' }},
+      { returnDocument: "after" }
+    )
+    console.log(updatedDocument);
   } catch (err) {
     console.log('task5', err);
   }
@@ -93,7 +124,12 @@ async function task5 () {
 //   ONLY if the 'b' value does not exist in the 'tags'
 async function task6 () {
   try {
-
+    const updatedDocument = await usersCollection.findOneAndUpdate(
+      { firstName: "Jason", lastName: "Wood" , tags: { $nin: ['b'] }},
+      { $push:  { tags: 'b' }},
+      { returnDocument: "after" }
+    )
+    console.log(updatedDocument);
   } catch (err) {
     console.log('task6', err);
   }
@@ -102,7 +138,10 @@ async function task6 () {
 // - Delete all users by department (Support)
 async function task7 () {
   try {
-
+    const updatedDocuments = await usersCollection.deleteMany(
+      {department: 'Support'}
+    )
+    console.log(updatedDocuments)
   } catch (err) {
     console.log('task7', err);
   }
@@ -116,7 +155,63 @@ async function task7 () {
 //   Pull ['tag2', 'tag1-a'] from all articles
 async function task8 () {
   try {
-    
+    const bulkOperations = [];
+    const articles = [
+      { name: 'Mongodb - introduction', description: 'Mongodb - text', type: 'a', tags: [] },
+      { name: 'MySQL - introduction', description: 'MySQL - text', type: 'b', tags: [] },
+      { name: 'PostgreSQL  - introduction', description: 'PostgreSQL - text', type: 'c', tags: [] }
+    ];
+
+    // Create articles
+    articles.forEach((article) => {
+      bulkOperations.push({
+        insertOne: { document: article }
+      });
+    });
+
+    // Find and update articles with type 'a' and update tag list
+    const updateFilter = { type: 'a' };
+    const updateOperation = {
+      $set: {
+        tags: ['tag1-a', 'tag2-a', 'tag3']
+      }
+    };
+    bulkOperations.push({
+      updateMany: {
+        filter: updateFilter,
+        update: updateOperation
+      }
+    });
+
+    // Add tags ['tag2', 'tag3', 'super'] to articles except type 'a'
+    const addTagsFilter = { type: { $ne: 'a' } };
+    const addTagsOperation = {
+      $push: {
+        tags: { $each: ['tag2', 'tag3', 'super'] }
+      }
+    };
+    bulkOperations.push({
+      updateMany: {
+        filter: addTagsFilter,
+        update: addTagsOperation
+      }
+    });
+
+    // Pull tags ['tag2', 'tag1-a'] from all articles
+    const pullTagsOperation = {
+      $pull: {
+        tags: { $in: ['tag2', 'tag1-a'] }
+      }
+    };
+    bulkOperations.push({
+      updateMany: {
+        filter: {},
+        update: pullTagsOperation
+      }
+    });
+
+    const bulkWriteResult = await articlesCollection.bulkWrite(bulkOperations);
+    console.log('Bulk write result:', bulkWriteResult);
   } catch (err) {
     console.error('task8', err);
   }
